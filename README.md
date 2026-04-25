@@ -79,21 +79,6 @@ Pentru a facilita procesul de evaluare, am pregătit un set de fișiere de test 
 
 ---
 
-## Structura Proiectului
-
-AgroGuard/
-├── frontend/
-│   └── app.py
-├── json/
-│   ├── engineering_posts.json
-│   ├── learnprogramming_posts.json
-│   └── cscareerquestions_posts.json
-├── txt/
-│   ├── engineering_posts.txt
-│   ├── learnprogramming_posts.txt
-│   └── cscareerquestions_posts.txt
-└── generate_career_pdf.py
-
 ## Instalare și Rulare Locală
 ### Clonați depozitul:
 
