@@ -82,17 +82,18 @@ Pentru a facilita procesul de evaluare, am pregătit un set de fișiere de test 
 ## Structura Proiectului
 
 AgriGuard-AI/
-├── frontend/
-│   └── app.py
-├── demo_files/
-│   └── (Imagini de test pentru juriu)
-├── models/
-│   ├── vision_model_rtx_finetuned.pth
-│   ├── xgboost_soil_model.pkl
-│   ├── soil_scaler.pkl
-│   └── soil_label_encoder.pkl
-├── requirements.txt
-└── README.md
+    frontend/
+        app.py
+    demo_files/
+        test_rosie_sanatoasa.jpg
+        test_cartof_early_blight.jpg
+    models/
+        vision_model_rtx_finetuned.pth
+        xgboost_soil_model.pkl
+        soil_scaler.pkl
+        soil_label_encoder.pkl
+    requirements.txt
+    README.md
 
 ## Instalare și Rulare Locală
 ### Clonați depozitul:
