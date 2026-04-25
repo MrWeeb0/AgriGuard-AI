@@ -1,4 +1,4 @@
-# AgriGuard AI — Asistent Inteligent pentru Fermieri
+# AgriGuard AI 
 
 **AgriGuard AI** este o platformă digitală avansată care combină **Computer Vision** și **Analiza de Date Tabulare** pentru a oferi fermierilor un diagnostic precis al bolilor plantelor și recomandări inteligente pentru optimizarea culturilor.
 
@@ -81,19 +81,18 @@ Pentru a facilita procesul de evaluare, am pregătit un set de fișiere de test 
 
 ## Structura Proiectului
 
-AgriGuard-AI/
-    frontend/
-        app.py
-    demo_files/
-        test_rosie_sanatoasa.jpg
-        test_cartof_early_blight.jpg
-    models/
-        vision_model_rtx_finetuned.pth
-        xgboost_soil_model.pkl
-        soil_scaler.pkl
-        soil_label_encoder.pkl
-    requirements.txt
-    README.md
+AgroGuard/
+├── frontend/
+│   └── app.py
+├── json/
+│   ├── engineering_posts.json
+│   ├── learnprogramming_posts.json
+│   └── cscareerquestions_posts.json
+├── txt/
+│   ├── engineering_posts.txt
+│   ├── learnprogramming_posts.txt
+│   └── cscareerquestions_posts.txt
+└── generate_career_pdf.py
 
 ## Instalare și Rulare Locală
 ### Clonați depozitul:
