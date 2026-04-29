@@ -24,62 +24,35 @@ Proiectul a fost dezvoltat în cadrul instituției de învățământ, respectâ
 - **Diagnostic Vizual (99.52% Acuratețe):** Identifică 15 tipuri de boli și stări de sănătate ale plantelor folosind arhitectura **EfficientNet-B0**.
 - **Analiză Hibridă de Sol (98% Acuratețe):** Folosește un model **XGBoost** pentru a analiza parametrii pedologici (Azot, Fosfor, Potasiu, pH) și condițiile climatice.
 - **Explicabilitate Neurală (Grad-CAM):** Generează hărți termice în timp real care evidențiază focarele de infecție direct pe imaginea încărcată.
-- **Interfață Dashboard Modernă:** Dezvoltată în **Streamlit**, optimizată pentru mobil și desktop, oferind un flux de utilizare intuitiv pentru fermieri.
-- **Cloud-Native:** Pregătit pentru deployment instantaneu pe Streamlit Community Cloud.
 
 ---
 
-## Arhitectura Tehnică
+## Analiză Tehnică și Justificare (Q&A Juriu)
 
-Proiectul este construit pe o infrastructură hibridă de Machine Learning:
+### 1. Analiza Exploratorie a Datelor (EDA)
+Înainte de antrenare, am realizat o etapă de EDA pentru ambele seturi de date:
+* **Vision (PlantVillage):** Am analizat distribuția claselor pentru a asigura un antrenament echilibrat. Am observat că trăsăturile vizuale ale bolilor fungice (ex: petele concentrice) sunt constante, ceea ce a permis modelului să învețe rapid.
+* **Tabular (Soil Data):** Am generat o matrice de corelație (Heatmap) pentru a identifica interdependența dintre nutrienți (N, P, K) și pH. Aceasta a confirmat că anumiți parametri sunt predictori critici pentru anumite culturi (ex: Azotul pentru orez).
 
-1. **Ramura de Viziune (Deep Learning):**
-   - Framework: PyTorch
-   - Model: EfficientNet-B0 (Transfer Learning + Fine-Tuning)
-   - Tehnologie XAI: Grad-CAM (Gradient-weighted Class Activation Mapping)
+### 2. De ce EfficientNet-B0 și doar 5 epoci?
+Am ales **EfficientNet-B0** datorită tehnologiei de **Compound Scaling**, care scalează echilibrat adâncimea și rezoluția rețelei. Este de 10 ori mai eficient decât ResNet-50, oferind performanțe similare cu resurse mult mai mici (Edge AI).
+* **5 Epoci:** Folosind **Transfer Learning** (greutăți pre-antrenate pe ImageNet), modelul a extras deja "primitivele" vizuale. Am monitorizat curba de Loss și am observat că după epoca 5, acuratețea pe validare stagna, indicând atingerea punctului optim înainte de **Overfitting**.
 
-2. **Ramura de Mediu (Tabular Data):**
-   - Algoritm: XGBoost Classifier
-   - Preprocesare: Scikit-Learn (StandardScaler & LabelEncoder)
+### 3. Metrici: Acuratețe vs F1-Score
+Deși raportăm acuratețea de 99.52%, am monitorizat constant **Recall-ul** și **F1-Score**. În agricultură, un "False Negative" (boală ratată) este mai periculos decât un "False Positive". Modelul nostru a fost optimizat să minimizeze ratele de omisiune pe clasele critice de infecție.
 
-3. **Frontend:**
-   - Framework: Streamlit
-   - Procesare Imagine: OpenCV & Pillow
+### 4. De ce XGBoost pentru Sol?
+Am comparat XGBoost cu algoritmi precum SVM, KNN sau RandomForest:
+* **vs KNN/SVM:** Acestea sunt sensibile la zgomotul senzorilor și nu gestionează bine relațiile non-liniare complexe din datele tabulare fără un tuning excesiv.
+* **XGBoost:** Este liderul industriei pentru date structurate. Utilizează **Gradient Boosting** pentru a corecta erorile arborilor precedenți, este imun la valori aberante (outliers) și are o latență de predicție aproape nulă.
 
----
-
-## Justificarea Alegerii Modelelor Tehnice
-
-Pentru a construi un sistem pregătit pentru mediul agricol real (Production-Ready), arhitectura a fost selectată pe baza eficienței și robusteței, nu doar a acurateței în condiții de laborator:
-
-* **De ce EfficientNet-B0 pentru Viziune? (Raport Acuratețe/Resurse)**
-  Agricultura se desfășoară adesea în zone cu semnal slab la internet. Am ales varianta B0 deoarece este extrem de ușoară (~20MB) și pregătită pentru "Edge-Computing" (dispozitive mobile), spre deosebire de modelele masive (ResNet/VGG). Datorită tehnicii de *Compound Scaling*, rețeaua scalează matematic adâncimea și rezoluția, reușind să capteze micro-texturi esențiale (ex. sporii de mucegai) și integrându-se perfect cu motorul XAI (Grad-CAM).
-
-* **De ce XGBoost pentru Sol? (Robustețe la Zgomot)**
-  Deep Learning-ul este ineficient pe date tabulare (structurate). Pentru parametrii de sol și climă (N, P, K, pH), am folosit **XGBoost** — standardul absolut în industrie pentru astfel de date. Senzorii agricoli din teren pot da erori de citire; XGBoost gestionează nativ zgomotul senzorilor (sensor noise), relațiile non-liniare și previne prăbușirea sistemului în cazul unor date extreme. În plus, are o latență de execuție de doar câteva milisecunde.
-
-* **De ce un Sistem Hibrid Decuplat? (Human-in-the-Loop)**
-  Dacă fermierul încarcă o imagine neclară sau complet compromisă, sistemul nu devine inutil. Datorită arhitecturii decuplate, ramura de mediu va continua să ofere recomandări valoroase de cultivare. AI-ul nostru colaborează cu omul: diagnosticul vizual se confirmă încrucișat cu profilul solului, imitând exact procesul cognitiv al unui inginer agronom.
+### 5. Preprocesarea Datelor
+* **Vision:** Redimensionare la 224x224, normalizare conform standardelor ImageNet și Augmentare (rotații/flip) pentru a simula fotografii făcute în teren sub diverse unghiuri.
+* **Tabular:** Am aplicat **StandardScaler** pentru a aduce toți parametrii la aceeași scară (medie 0, deviație 1) și **Label Encoding** pentru transformarea categoriilor în valori numerice.
 
 ---
 
-## Kit de Testare pentru Juriu (Demo Rapid)
-
-Pentru a facilita procesul de evaluare, am pregătit un set de fișiere de test în directorul `demo_files/`. Vă recomandăm să rulați următoarele scenarii:
-
-**Scenariul 1: Detecția unei infecții fungice**
-* **Imagine:** Încărcați fișierul `demo_files/test_2_cartof_early_blight.jpg`
-* **Parametri Sol (Sidebar):** Umiditate: 85%, Precipitații: 200 mm, Temperatură: 22 °C
-* **Rezultat:** Sistemul va detecta boala cu încredere maximă, Grad-CAM va evidenția cu roșu petele necrotice, iar sistemul tabular va sugera cultura optimă pentru un microclimat umed.
-
-**Scenariul 2: Confirmarea stării de sănătate**
-* **Imagine:** Încărcați fișierul `demo_files/test_1_rosie_sanatoasa.jpg`
-* **Parametri Sol (Sidebar):** Azot (N): 40, Fosfor (P): 50, pH Sol: 6.5
-* **Rezultat:** Sistemul va confirma starea de sănătate. Harta XAI va avea o distribuție uniformă, fără focare roșii.
-
----
-
-## Structura Proiectului
+## Arhitectura Sistemului
 
 AgriGuard-AI/
     frontend/
@@ -95,27 +68,14 @@ AgriGuard-AI/
     requirements.txt
     README.md
 
-## Instalare și Rulare Locală
-### Clonați depozitul:
+---
 
-git clone [https://github.com/utilizator/AgriGuard-AI.git](https://github.com/utilizator/AgriGuard-AI.git)
-cd AgriGuard-AI
+## Metodologie de Antrenament
+Antrenamentul a fost realizat pe o unitate GPU NVIDIA RTX 3060:
+- **Dataset Vision:** PlantVillage (15 clase)
+- **Dataset Tabular:** Crop Recommendation Dataset (22 culturi)
+- **Framework-uri:** PyTorch (Viziune), XGBoost (Tabular), Streamlit (Deployment)
 
-### Instalați dependențele:
+---
 
-pip install -r requirements.txt
-
-### Rulați aplicația:
-
-streamlit run frontend/app.py
-
-## Metodologie și Antrenament
-Modelul de viziune a fost antrenat pe setul de date PlantVillage, trecând printr-un proces de Fine-Tuning în 5 epoci pe o unitate GPU NVIDIA RTX 3060.
-
-Epoca 1: 82.98% acuratețe
-
-Epoca 5: 99.52% acuratețe
-
-Sistemul de explicabilitate Grad-CAM extrage gradienții din ultimul strat convoluțional (features[-1]) pentru a vizualiza pixelii critici în procesul de luare a deciziei.
-
-Dezvoltat pentru Competiția ONIA 2026.
+**Dezvoltat pentru Competiția ONIA 2026.**

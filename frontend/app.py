@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 @st.cache_resource
 def load_vision_model():
-    num_classes = 16
+    num_classes = 15
     model = models.efficientnet_b0(weights=None)
     model.classifier[1] = torch.nn.Linear(model.classifier[1].in_features, num_classes)
     model.load_state_dict(torch.load('models/vision_model_rtx_finetuned.pth', map_location=torch.device('cpu')))
@@ -57,7 +57,7 @@ CLASE_BOLI = [
     'Tomato_Leaf_Mold', 'Tomato_Septoria_leaf_spot', 
     'Tomato_Spider_mites_Two_spotted_spider_mite', 'Tomato__Target_Spot',
     'Tomato__Tomato_YellowLeaf__Curl_Virus', 'Tomato__Tomato_mosaic_virus',
-    'Tomato_healthy', 'Necunoscut_Fantoma'
+    'Tomato_healthy'
 ]
 
 transformare_imagine = transforms.Compose([
@@ -183,7 +183,7 @@ if st.button("Scanează și Generează Diagnostic", use_container_width=True):
                 st.markdown("#### Rezultate Fuziune Modele")
                 col_res1, col_res2 = st.columns(2)
                 with col_res1:
-                    st.metric(label="Stare Frunza Detectata", value=nume_boala, delta=f"{incredere_boala:.2f}% Siguranta")
+                    st.metric(label="Stare Frunza Detectata", value=nume_boala, delta=f"{incredere_boala:.2f}% Acuratețe")
                     if "healthy" in nume_boala.lower():
                         st.info("Frunza pare perfect sănătoasă. Continuați planul de irigare standard.")
                     else:
