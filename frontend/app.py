@@ -190,7 +190,7 @@ if st.button("Scanează și Generează Diagnostic", use_container_width=True):
                         st.warning("A fost detectată o infecție. Se recomandă izolare și tratament fungic/bacterian.")
                         
                 with col_res2:
-                    st.metric(label="Recomandare Cultura (Agro-Meteo)", value=nume_cultura.capitalize(), delta=f"{incredere_cultura:.2f}% Potrivire")
+                    st.metric(label="Recomandare Cultura (Agro-Meteo)", value=nume_cultura.capitalize(), delta=f"{incredere_cultura:.2f}% Acuratețe")
                     st.info(f"Parametrii actuali (N:{n_val}, Umiditate:{hum_val}%) sunt optimi pentru {nume_cultura}.")
             
             with tab2:
