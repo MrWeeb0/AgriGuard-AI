@@ -7,8 +7,13 @@ import joblib
 import pandas as pd
 import numpy as np
 import cv2
+import os
 
 st.set_page_config(page_title="AgriGuard AI Pro", page_icon="🌱", layout="wide")
+
+# Get project root directory (parent of frontend directory)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(PROJECT_ROOT, 'models')
 
 st.markdown("""
     <style>
@@ -35,15 +40,16 @@ def load_vision_model():
     num_classes = 15
     model = models.efficientnet_b0(weights=None)
     model.classifier[1] = torch.nn.Linear(model.classifier[1].in_features, num_classes)
-    model.load_state_dict(torch.load('models/vision_model_rtx_finetuned.pth', map_location=torch.device('cpu')))
+    model_path = os.path.join(MODELS_DIR, 'vision_model_rtx_finetuned.pth')
+    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
     model.eval()
     return model
 
 @st.cache_resource
 def load_tabular_model():
-    model_rf = joblib.load('models/random_forest_soil_model.pkl')
-    scaler = joblib.load('models/soil_scaler.pkl')
-    encoder = joblib.load('models/soil_label_encoder.pkl')
+    model_rf = joblib.load(os.path.join(MODELS_DIR, 'random_forest_soil_model.pkl'))
+    scaler = joblib.load(os.path.join(MODELS_DIR, 'soil_scaler.pkl'))
+    encoder = joblib.load(os.path.join(MODELS_DIR, 'soil_label_encoder.pkl'))
     return model_rf, scaler, encoder
 
 vision_model = load_vision_model()

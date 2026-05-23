@@ -33,33 +33,44 @@ Valoarea practică a sistemului este definită de un set de indicatori de perfor
 
 Platforma integrează un sistem multi-modal ce decuplează procesarea datelor structurate de cele nestructurate în două servicii Machine Learning complementare, unificate la nivel de backend printr-un modul de validare ierarhică a consistenței logice.
 
-              +-----------------------------------+
-              |        INTERFAȚA STREAMLIT        |
-              +-----------------+-----------------+
-                                |
-        +-----------------------+-----------------------+
-        |                                               |
-        v                                               v
-[DATE NESTRUCTURATE: IMAGINE]                     [DATE STRUCTURATE: SENZORI]
-|                                               |
-v                                               v
-EfficientNet-B0 (PyTorch)                     Random Forest (Scikit-Learn)
-Input: Imagine frunză (RGB)                   Input: [N, P, K, T, H, pH, Rain]
-Output: Probabilități clasă                   Output: Probabilități cultură
-Filtru OOD: Softmax Threshold                 Tuning: GridSearchCV + SKFold
-|                                               |
-+-----------------------+-----------------------+
-|
-v
-+-----------------------------------+
-|    MOTOR DE FUZIUNE ALGORITMICĂ   |
-|     (Intercepție Anomalii Eco)    |
-+-----------------+-----------------+
-|
-v
-+-----------------------------------+
-|     Raport de Diagnostic Hibrid   |
-+-----------------------------------+
+```
+                    ┌─────────────────────────────┐
+                    │   INTERFAȚA STREAMLIT       │
+                    └──────────────┬──────────────┘
+                                   │
+                ┌──────────────────┼──────────────────┐
+                │                                      │
+                v                                      v
+    ┌──────────────────────────┐      ┌──────────────────────────┐
+    │ DATE NESTRUCTURATE:      │      │ DATE STRUCTURATE:        │
+    │ IMAGINE                  │      │ SENZORI                  │
+    └──────────────┬───────────┘      └──────────┬───────────────┘
+                   │                             │
+                   v                             v
+    ┌──────────────────────────┐      ┌──────────────────────────┐
+    │ EfficientNet-B0 (PyTorch)│      │ Random Forest            │
+    │ Input: Imagine frunză    │      │ Input: [N, P, K, T,     │
+    │ (RGB)                    │      │         H, pH, Rain]     │
+    │ Output: Probabilități    │      │ Output: Probabilități    │
+    │ clasă                    │      │ cultură                  │
+    │ Filtru OOD: Softmax τ    │      │ Tuning: GridSearchCV +   │
+    │ = 0.75                   │      │ StratifiedKFold          │
+    └──────────────┬───────────┘      └──────────┬───────────────┘
+                   │                             │
+                   └──────────────┬──────────────┘
+                                  │
+                                  v
+                   ┌──────────────────────────────┐
+                   │  MOTOR DE FUZIUNE            │
+                   │  ALGORITMICĂ                 │
+                   │  (Intercepție Anomalii Eco)  │
+                   └──────────────┬───────────────┘
+                                  │
+                                  v
+                   ┌──────────────────────────────┐
+                   │  Raport de Diagnostic Hibrid │
+                   └──────────────────────────────┘
+```
 
 
 ### 2.1 Serviciul ML pe Date Structurate (Recomandare Culturi)
