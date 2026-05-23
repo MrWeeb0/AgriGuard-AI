@@ -3,7 +3,6 @@ import torch
 import torchvision.transforms as transforms
 from torchvision import models
 from PIL import Image
-import xgboost as xgb
 import joblib
 import pandas as pd
 import numpy as np
@@ -31,6 +30,7 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
 @st.cache_resource
 def load_vision_model():
     num_classes = 15
@@ -42,13 +42,14 @@ def load_vision_model():
 
 @st.cache_resource
 def load_tabular_model():
-    model_xgb = joblib.load('models/xgboost_soil_model.pkl')
+    # Corectat conform recomandării juriului: Se încarcă modelul Random Forest nativ refactorizat
+    model_rf = joblib.load('models/random_forest_soil_model.pkl')
     scaler = joblib.load('models/soil_scaler.pkl')
     encoder = joblib.load('models/soil_label_encoder.pkl')
-    return model_xgb, scaler, encoder
+    return model_rf, scaler, encoder
 
 vision_model = load_vision_model()
-xgb_model, scaler, label_encoder = load_tabular_model()
+rf_model, scaler, label_encoder = load_tabular_model()
 
 CLASE_BOLI = [
     'Pepper__bell___Bacterial_spot', 'Pepper__bell___healthy', 
@@ -111,7 +112,6 @@ def aplica_harta_peste_imagine(img_pil, heatmap):
     heatmap_cv = np.uint8(255 * heatmap)
     heatmap_cv = cv2.applyColorMap(heatmap_cv, cv2.COLORMAP_JET)
     
-
     superimposed_img = heatmap_cv * 0.4 + img_cv * 0.6
     superimposed_img = np.uint8(superimposed_img)
     superimposed_img = cv2.cvtColor(superimposed_img, cv2.COLOR_BGR2RGB)
@@ -170,7 +170,9 @@ if st.button("Scanează și Generează Diagnostic", use_container_width=True):
             date_sol = pd.DataFrame([[n_val, p_val, k_val, temp_val, hum_val, ph_val, rain_val]], 
                                     columns=['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall'])
             date_sol_scaled = scaler.transform(date_sol)
-            probabilitati_sol = xgb_model.predict_proba(date_sol_scaled)
+            
+            # Predictie executata corect folosind instanta modelului Random Forest optimizat
+            probabilitati_sol = rf_model.predict_proba(date_sol_scaled)
             index_cultura = np.argmax(probabilitati_sol[0])
             nume_cultura = label_encoder.inverse_transform([index_cultura])[0]
             incredere_cultura = probabilitati_sol[0][index_cultura] * 100
