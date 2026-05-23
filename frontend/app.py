@@ -7,13 +7,8 @@ import joblib
 import pandas as pd
 import numpy as np
 import cv2
-import os
 
 st.set_page_config(page_title="AgriGuard AI Pro", page_icon="🌱", layout="wide")
-
-# Get project root directory (parent of frontend directory)
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODELS_DIR = os.path.join(PROJECT_ROOT, 'models')
 
 st.markdown("""
     <style>
@@ -40,16 +35,15 @@ def load_vision_model():
     num_classes = 15
     model = models.efficientnet_b0(weights=None)
     model.classifier[1] = torch.nn.Linear(model.classifier[1].in_features, num_classes)
-    model_path = os.path.join(MODELS_DIR, 'vision_model_rtx_finetuned.pth')
-    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load('models/vision_model_rtx_finetuned.pth', map_location=torch.device('cpu')))
     model.eval()
     return model
 
 @st.cache_resource
 def load_tabular_model():
-    model_rf = joblib.load(os.path.join(MODELS_DIR, 'random_forest_soil_model.pkl'))
-    scaler = joblib.load(os.path.join(MODELS_DIR, 'soil_scaler.pkl'))
-    encoder = joblib.load(os.path.join(MODELS_DIR, 'soil_label_encoder.pkl'))
+    model_rf = joblib.load('models/random_forest_soil_model.pkl')
+    scaler = joblib.load('models/soil_scaler.pkl')
+    encoder = joblib.load('models/soil_label_encoder.pkl')
     return model_rf, scaler, encoder
 
 vision_model = load_vision_model()
@@ -70,8 +64,21 @@ MATRICE_COMPATIBILITATE_ROTATIE = {
         'optimizat': ['chickpea', 'lentil', 'kidneybeans', 'pigeonpeas', 'mungbean', 'blackgram'],
         'tolerat': ['maize', 'watermelon', 'muskmelon', 'banana', 'mango', 'grapes', 'apple', 'orange', 'papaya'],
         'anomalie_critica': ['rice', 'jute', 'coconut', 'coffee', 'cotton']
+    },
+    'Cucurbitaceae': {
+        'optimizat': ['maize', 'beans'],
+        'tolerat': ['rice'],
+        'anomalie_critica': ['groundnut']
     }
 }
+
+def obtine_familie_botanica(nume_clasa):
+    clasa_lower = nume_clasa.lower()
+    if 'pepper' in clasa_lower or 'potato' in clasa_lower or 'tomato' in clasa_lower:
+        return 'Solanaceae'
+    elif 'cucumber' in clasa_lower or 'melon' in clasa_lower:
+        return 'Cucurbitaceae'
+    return 'Unknown'
 
 transformare_imagine = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -148,10 +155,12 @@ with col_img:
 st.markdown("---")
 
 if st.button("Execută Analiza Multimodală Hibridă", use_container_width=True):
-    if fisier_incarcat is None:
-        st.error("Eroare: Modulul de viziune computerizată necesită o intrare de date (imagine foliară).")
-    else:
-        with st.spinner('Se rulează inferența ierarhică și verificarea consistenței logice...'):
+    with st.spinner('Se rulează inferența ierarhică și verificarea consistenței logice...'):
+        executa_sol = False
+        executa_viziune = False
+        PRAG_SIGURANTA_OOD = 0.75
+        
+        if fisier_incarcat is not None:
             img_tensor = transformare_imagine(imagine).unsqueeze(0)
             img_tensor.requires_grad = True
             
@@ -161,26 +170,32 @@ if st.button("Execută Analiza Multimodală Hibridă", use_container_width=True)
             incredere_boala = incredere_boala.item()
             index_boala = index_boala.item()
             
-            PRAG_SIGURANTA_OOD = 0.75
-            
-            if incredere_boala < PRAG_SIGURANTA_OOD:
-                st.error("🚨 Filtru Out-of-Distribution (OOD) Activat: Imaginea încărcată nu prezintă markeri fitosanitari recognoscibili sau aparține unui cadru non-vegetal/unknown. Scanarea a fost interceptată pentru prevenirea alertelor false.")
+            if incredere_boala >= PRAG_SIGURANTA_OOD:
+                executa_viziune = True
+                executa_sol = True
             else:
+                st.warning("⚠️ Filtru Out-of-Distribution (OOD) Activat: Imaginea încărcată nu prezintă markeri fitosanitari recognoscibili sau aparține unui cadru non-vegetal. Modulul de viziune este dezactivat temporar conform protocolului Service Degradation, dar rulăm analiza completă de sol!")
+                executa_sol = True
+        else:
+            st.info("ℹ️ Nu a fost încărcată o imagine foliară. Conform protocolului Service Degradation, modulul optic este suspendat, rulându-se exclusiv analiza predictivă a solului.")
+            executa_sol = True
+            
+        if executa_sol:
+            date_sol = pd.DataFrame([[n_val, p_val, k_val, temp_val, hum_val, ph_val, rain_val]], 
+                                    columns=['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall'])
+            date_sol_scaled = scaler.transform(date_sol)
+            probabilitati_sol = rf_model.predict_proba(date_sol_scaled)
+            index_cultura = np.argmax(probabilitati_sol[0])
+            nume_cultura = label_encoder.inverse_transform([index_cultura])[0]
+            incredere_cultura = probabilitati_sol[0][index_cultura] * 100
+            
+            if executa_viziune:
                 harta_termica = cam_engine.genereaza_harta(img_tensor, index_boala)
                 imagine_explicata = aplica_harta_peste_imagine(imagine, harta_termica)
-                
                 nume_boala = CLASE_BOLI[index_boala].replace("___", " - ").replace("_", " ")
+                familie_botanica = obtine_familie_botanica(CLASE_BOLI[index_boala])
                 
-                date_sol = pd.DataFrame([[n_val, p_val, k_val, temp_val, hum_val, ph_val, rain_val]], 
-                                        columns=['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall'])
-                date_sol_scaled = scaler.transform(date_sol)
-                probabilitati_sol = rf_model.predict_proba(date_sol_scaled)
-                index_cultura = np.argmax(probabilitati_sol[0])
-                nume_cultura = label_encoder.inverse_transform([index_cultura])[0]
-                incredere_cultura = probabilitati_sol[0][index_cultura] * 100
-
-                st.success("Fuziune ierarhică finalizată.")
-                
+                st.success("Fuziune ierarhică multimodală finalizată cu succes.")
                 tab1, tab2, tab3 = st.tabs(["Raport Agronomic Integrat", "Explicabilitate Vizuală (Grad-CAM)", "Fuziune și Validare Backend"])
                 
                 with tab1:
@@ -194,30 +209,39 @@ if st.button("Execută Analiza Multimodală Hibridă", use_container_width=True)
                     st.markdown("#### Validare Mapare Localizată (XAI)")
                     col_xai1, col_xai2, col_xai3 = st.columns([1, 2, 1])
                     with col_xai2:
-                        st.image(imagine_explicata, caption='Zonele de activare neuronală asociate patologiei', use_column_width=True)
+                        st.image(imagine_explicata, caption='Zonele de activare neuronală asociate patologiei', use_container_width=True)
                 
                 with tab3:
                     st.markdown("#### Controlul Consistenței Logice Multimodale")
-                    
-                    if nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE['Solanaceae']['anomalie_critica']:
-                        st.markdown(f"""
-                        <div style="background-color:#ffebee; padding:15px; border-left:6px solid #e53935; border-radius:4px;">
-                            <h4 style="color:#c62828; margin:0;">⚠️ Alertă de Neconcordanță Logică Agronomică</h4>
-                            <p style="color:#b71c1c; margin:5px 0 0 0;">
-                                <b>Conflict în sistemul de fuziune:</b> Parametrii pedoclimatici introduși sunt specifici unei culturi cu cerințe hidrice masive sau tropicale (<b>{nume_cultura.capitalize()}</b>), 
-                                ceea ce contrazice biologic prezența unei culturi active de Solanacee identificată prin analiză foliară (<b>{nume_boala.split(' ')[0]}</b>). Solurile saturate sau inundate declanșează asfixierea radiculară a tomatelor/cartofilor. Verificați inputurile senzorilor.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    elif nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE['Solanaceae']['optimizat']:
-                        st.markdown(f"""
-                        <div style="background-color:#e8f5e9; padding:15px; border-left:6px solid #43a047; border-radius:4px;">
-                            <h4 style="color:#2e7d32; margin:0;">✅ Consistență Eco-Agronomică Optimă</h4>
-                            <p style="color:#1b5e20; margin:5px 0 0 0;">
-                                <b>Fuziune Validată:</b> Cultura curentă de Solanacee prezintă patologii foliare, însă modelul de sol recomandă corect o rotație cu o leguminoasă fixatoare avansată de azot (<b>{nume_cultura.capitalize()}</b>). 
-                                Acest plan de asolament va rupe ciclul biologic al fitopatogenilor din sol și va reface stocul nativ de Nitrogen fără fertilizare chimică excesivă.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
+                    if familie_botanica in MATRICE_COMPATIBILITATE_ROTATIE:
+                        if nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE[familie_botanica]['anomalie_critica']:
+                            st.markdown(f"""
+                            <div style="background-color:#ffebee; padding:15px; border-left:6px solid #e53935; border-radius:4px;">
+                                <h4 style="color:#c62828; margin:0;">⚠️ Alertă de Neconcordanță Logică Agronomică</h4>
+                                <p style="color:#b71c1c; margin:5px 0 0 0;">
+                                    <b>Conflict în sistemul de fuziune:</b> Parametrii pedoclimatici introduși sunt specifici unei culturi cu cerințe hidrice masive sau tropicale (<b>{nume_cultura.capitalize()}</b>), 
+                                    ceea ce contrazice biologic prezența unei culturi active din familia <b>{familie_botanica}</b> identificată prin analiză foliară (<b>{nume_boala.split(' ')[0]}</b>). Solurile saturate sau inundate declanșează asfixierea radiculară a tomatelor/cartofilor. Verificați inputurile senzorilor.
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        elif nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE[familie_botanica]['optimizat']:
+                            st.markdown(f"""
+                            <div style="background-color:#e8f5e9; padding:15px; border-left:6px solid #43a047; border-radius:4px;">
+                                <h4 style="color:#2e7d32; margin:0;">✅ Consistență Eco-Agronomică Optimă</h4>
+                                <p style="color:#1b5e20; margin:5px 0 0 0;">
+                                    <b>Fuziune Validată:</b> Cultura curentă din familia <b>{familie_botanica}</b> prezintă patologii foliare, însă modelul de sol recomandă corect o rotație cu o leguminoasă fixatoare avansată de azot (<b>{nume_cultura.capitalize()}</b>). 
+                                    Acest plan de asolament va rupe ciclul biologic al fitopatogenilor din sol și va reface stocul nativ de Nitrogen fără fertilizare chimică excesivă.
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.info(f"Fuziune neutră: Rezultatele pentru familia {familie_botanica} sunt consistente din punct de vedere ecologic. Nu s-au detectat anomalii sau corelații ideale de asolament.")
                     else:
-                        st.info("Fuziune neutră: Rezultatele sunt consistente din punct de vedere ecologic. Nu s-au detectat anomalii sau corelații ideale de asolament.")
+                        st.info("Fuziune neutră: Familia botanică detectată nu are reguli stricte de asolament definite.")
+            else:
+                st.success("Analiză pedoclimatică finalizată.")
+                tab1 = st.tabs(["Plan de Asolament Optimizat"])[0]
+                with tab1:
+                    st.markdown("#### Rezultate Analiză Independentă de Sol")
+                    st.metric(label="Plan de Asolament Recomandat (Sol)", value=nume_cultura.capitalize(), delta=f"{incredere_cultura:.2f}% Stabilitate")
+                    st.info(f"Parametrii chimici actuali indică un mediu optim pentru cultivarea speciei {nume_cultura.capitalize()}. Se recomandă monitorizarea echilibrului de macro-nutrienți.")
