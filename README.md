@@ -88,6 +88,5 @@ AgriGuard-AI/
 │   └── 04_train_tabular_model.ipynb       # Antrenare și comparare model sol
 │
 ├── requirements.txt                       # Dependențe configurate pentru Cloud
-└── README.md                              # Raportul tehnic oficial al proiectului ```
+└── README.md                              # Raportul tehnic oficial al proiectului 
 
-## Proiect dezvoltat pentru Competiția Națională ONIA 2026.
