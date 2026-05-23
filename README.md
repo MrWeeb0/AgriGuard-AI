@@ -1,4 +1,4 @@
-# 🌱 AgriGuard AI — Sistem Hibrid de Inteligență Artificială pentru Diagnosticarea Patologiilor Vegetale și Optimizarea Culturilor cu Explicabilitate Algoritmică (XAI)
+# 🌱 AgriGuard AI — Sistem Hibrid de Inteligență Artificială pentru Diagnosticarea Patologiilor Vegetale
 
 ---
 
