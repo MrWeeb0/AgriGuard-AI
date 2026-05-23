@@ -8,13 +8,12 @@ import pandas as pd
 import numpy as np
 import cv2
 
-st.set_page_config(page_title="AgriGuard AI", page_icon="🌱", layout="wide")
+st.set_page_config(page_title="AgriGuard AI Pro", page_icon="🌱", layout="wide")
 
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    
     .stButton>button {
         background-color: #2e7d32;
         color: white;
@@ -42,7 +41,6 @@ def load_vision_model():
 
 @st.cache_resource
 def load_tabular_model():
-    # Corectat conform recomandării juriului: Se încarcă modelul Random Forest nativ refactorizat
     model_rf = joblib.load('models/random_forest_soil_model.pkl')
     scaler = joblib.load('models/soil_scaler.pkl')
     encoder = joblib.load('models/soil_label_encoder.pkl')
@@ -60,6 +58,14 @@ CLASE_BOLI = [
     'Tomato__Tomato_YellowLeaf__Curl_Virus', 'Tomato__Tomato_mosaic_virus',
     'Tomato_healthy'
 ]
+
+MATRICE_COMPATIBILITATE_ROTATIE = {
+    'Solanaceae': {
+        'optimizat': ['chickpea', 'lentil', 'kidneybeans', 'pigeonpeas', 'mungbean', 'blackgram'],
+        'tolerat': ['maize', 'watermelon', 'muskmelon', 'banana', 'mango', 'grapes', 'apple', 'orange', 'papaya'],
+        'anomalie_critica': ['rice', 'jute', 'coconut', 'coffee', 'cotton']
+    }
+}
 
 transformare_imagine = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -83,21 +89,16 @@ class GradCAM:
         self.gradients = grad_output[0]
 
     def genereaza_harta(self, x, class_idx):
-        b, c, h, w = x.size()
         output = self.model(x)
         self.model.zero_grad()
-        
         class_loss = output[0, class_idx]
         class_loss.backward(retain_graph=True)
-
         gradients = self.gradients.data.cpu().numpy()[0]
         activations = self.activations.data.cpu().numpy()[0]
         weights = np.mean(gradients, axis=(1, 2))
-        
         cam = np.zeros(activations.shape[1:], dtype=np.float32)
         for i, w_val in enumerate(weights):
             cam += w_val * activations[i]
-
         cam = np.maximum(cam, 0)
         cam = cv2.resize(cam, (224, 224))
         cam = cam - np.min(cam)
@@ -108,96 +109,109 @@ class GradCAM:
 def aplica_harta_peste_imagine(img_pil, heatmap):
     img_cv = np.array(img_pil.resize((224, 224)))
     img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)
-    
     heatmap_cv = np.uint8(255 * heatmap)
     heatmap_cv = cv2.applyColorMap(heatmap_cv, cv2.COLORMAP_JET)
-    
     superimposed_img = heatmap_cv * 0.4 + img_cv * 0.6
-    superimposed_img = np.uint8(superimposed_img)
-    superimposed_img = cv2.cvtColor(superimposed_img, cv2.COLOR_BGR2RGB)
-    
-    return Image.fromarray(superimposed_img)
+    return Image.fromarray(cv2.cvtColor(np.uint8(superimposed_img), cv2.COLOR_BGR2RGB))
 
 cam_engine = GradCAM(vision_model, vision_model.features[-1])
 
-st.title("AgriGuard AI - Asistent Inteligent pentru Fermieri")
-st.markdown("Sistem Hibrid cu **Explicabilitate Vizuală (XAI)**. Încărcați datele pentru diagnostic.")
+st.title("🌱 AgriGuard AI Pro — Sistem Multimodal de Diagnostic și Asistență Agronomică")
 
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2910/2910822.png", width=80) 
-    st.title("Parametri Sol & Mediu")
-    st.markdown("Ajustează senzorii virtuali:")
-    
-    n_val = st.slider("Nitrogen (N)", 0, 150, 40, help="Nivelul de Azot din sol")
+    st.title("Senzori Pedoclimatici")
+    n_val = st.slider("Nitrogen (N)", 0, 150, 40)
     p_val = st.slider("Fosfor (P)", 0, 150, 40)
     k_val = st.slider("Potasiu (K)", 0, 200, 40)
     temp_val = st.slider("Temperatură (°C)", 0.0, 50.0, 25.0)
     hum_val = st.slider("Umiditate (%)", 0.0, 100.0, 70.0)
     ph_val = st.slider("pH Sol", 0.0, 14.0, 6.5)
-    rain_val = st.slider("Precipitații (mm)", 0.0, 300.0, 250.0)
+    rain_val = st.slider("Precipitații (mm)", 0.0, 300.0, 120.0)
 
 col_header, col_img = st.columns([2, 1])
 with col_header:
-    st.markdown("### Pasul 1: Încarcă imaginea plantei")
-    fisier_incarcat = st.file_uploader("", type=["jpg", "png", "jpeg"], help="Trage imaginea aici sau dă click")
+    st.markdown("### Monitorizare Foliară")
+    fisier_incarcat = st.file_uploader("Încărcați imaginea macro a frunzei afectate:", type=["jpg", "png", "jpeg"])
 
 with col_img:
     if fisier_incarcat is not None:
         imagine = Image.open(fisier_incarcat).convert('RGB')
-        st.image(imagine, caption='Imagine Procesată', width=200)
+        st.image(imagine, caption='Cadru recepționat', width=180)
 
 st.markdown("---")
 
-if st.button("Scanează și Generează Diagnostic", use_container_width=True):
+if st.button("Execută Analiza Multimodală Hibridă", use_container_width=True):
     if fisier_incarcat is None:
-        st.error("Sistemul necesită o imagine pentru a iniția scanarea vizuală.")
+        st.error("Eroare: Modulul de viziune computerizată necesită o intrare de date (imagine foliară).")
     else:
-        with st.spinner('Sistemul Neural procesează datele...'):
-            
+        with st.spinner('Se rulează inferența ierarhică și verificarea consistenței logice...'):
             img_tensor = transformare_imagine(imagine).unsqueeze(0)
             img_tensor.requires_grad = True
             
             output_vision = vision_model(img_tensor)
             probabilitati_vision = torch.nn.functional.softmax(output_vision[0], dim=0)
-            index_boala = torch.argmax(probabilitati_vision).item()
+            incredere_boala, index_boala = torch.max(probabilitati_vision, dim=0)
+            incredere_boala = incredere_boala.item()
+            index_boala = index_boala.item()
             
-            harta_termica = cam_engine.genereaza_harta(img_tensor, index_boala)
-            imagine_explicata = aplica_harta_peste_imagine(imagine, harta_termica)
+            PRAG_SIGURANTA_OOD = 0.75
             
-            nume_boala = CLASE_BOLI[index_boala].replace("___", " - ").replace("_", " ")
-            incredere_boala = probabilitati_vision[index_boala].item() * 100
+            if incredere_boala < PRAG_SIGURANTA_OOD:
+                st.error("🚨 Filtru Out-of-Distribution (OOD) Activat: Imaginea încărcată nu prezintă markeri fitosanitari recognoscibili sau aparține unui cadru non-vegetal/unknown. Scanarea a fost interceptată pentru prevenirea alertelor false.")
+            else:
+                harta_termica = cam_engine.genereaza_harta(img_tensor, index_boala)
+                imagine_explicata = aplica_harta_peste_imagine(imagine, harta_termica)
                 
-            date_sol = pd.DataFrame([[n_val, p_val, k_val, temp_val, hum_val, ph_val, rain_val]], 
-                                    columns=['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall'])
-            date_sol_scaled = scaler.transform(date_sol)
-            
-            # Predictie executata corect folosind instanta modelului Random Forest optimizat
-            probabilitati_sol = rf_model.predict_proba(date_sol_scaled)
-            index_cultura = np.argmax(probabilitati_sol[0])
-            nume_cultura = label_encoder.inverse_transform([index_cultura])[0]
-            incredere_cultura = probabilitati_sol[0][index_cultura] * 100
+                nume_boala = CLASE_BOLI[index_boala].replace("___", " - ").replace("_", " ")
+                
+                date_sol = pd.DataFrame([[n_val, p_val, k_val, temp_val, hum_val, ph_val, rain_val]], 
+                                        columns=['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall'])
+                date_sol_scaled = scaler.transform(date_sol)
+                probabilitati_sol = rf_model.predict_proba(date_sol_scaled)
+                index_cultura = np.argmax(probabilitati_sol[0])
+                nume_cultura = label_encoder.inverse_transform([index_cultura])[0]
+                incredere_cultura = probabilitati_sol[0][index_cultura] * 100
 
-            st.success("Analiză completă finalizată.")
-            
-            tab1, tab2 = st.tabs(["Diagnostic Oficial", "XAI (Explicabilitate Neurală)"])
-            
-            with tab1:
-                st.markdown("#### Rezultate Fuziune Modele")
-                col_res1, col_res2 = st.columns(2)
-                with col_res1:
-                    st.metric(label="Stare Frunza Detectata", value=nume_boala, delta=f"{incredere_boala:.2f}% Acuratețe")
-                    if "healthy" in nume_boala.lower():
-                        st.info("Frunza pare perfect sănătoasă. Continuați planul de irigare standard.")
+                st.success("Fuziune ierarhică finalizată.")
+                
+                tab1, tab2, tab3 = st.tabs(["Raport Agronomic Integrat", "Explicabilitate Vizuală (Grad-CAM)", "Fuziune și Validare Backend"])
+                
+                with tab1:
+                    col_res1, col_res2 = st.columns(2)
+                    with col_res1:
+                        st.metric(label="Patologie Detectată (Viziune)", value=nume_boala, delta=f"{incredere_boala*100:.2f}% Confidențialitate")
+                    with col_res2:
+                        st.metric(label="Plan de Asolament Recomandat (Sol)", value=nume_cultura.capitalize(), delta=f"{incredere_cultura:.2f}% Stabilitate")
+                
+                with tab2:
+                    st.markdown("#### Validare Mapare Localizată (XAI)")
+                    col_xai1, col_xai2, col_xai3 = st.columns([1, 2, 1])
+                    with col_xai2:
+                        st.image(imagine_explicata, caption='Zonele de activare neuronală asociate patologiei', use_column_width=True)
+                
+                with tab3:
+                    st.markdown("#### Controlul Consistenței Logice Multimodale")
+                    
+                    if nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE['Solanaceae']['anomalie_critica']:
+                        st.markdown(f"""
+                        <div style="background-color:#ffebee; padding:15px; border-left:6px solid #e53935; border-radius:4px;">
+                            <h4 style="color:#c62828; margin:0;">⚠️ Alertă de Neconcordanță Logică Agronomică</h4>
+                            <p style="color:#b71c1c; margin:5px 0 0 0;">
+                                <b>Conflict în sistemul de fuziune:</b> Parametrii pedoclimatici introduși sunt specifici unei culturi cu cerințe hidrice masive sau tropicale (<b>{nume_cultura.capitalize()}</b>), 
+                                ceea ce contrazice biologic prezența unei culturi active de Solanacee identificată prin analiză foliară (<b>{nume_boala.split(' ')[0]}</b>). Solurile saturate sau inundate declanșează asfixierea radiculară a tomatelor/cartofilor. Verificați inputurile senzorilor.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE['Solanaceae']['optimizat']:
+                        st.markdown(f"""
+                        <div style="background-color:#e8f5e9; padding:15px; border-left:6px solid #43a047; border-radius:4px;">
+                            <h4 style="color:#2e7d32; margin:0;">✅ Consistență Eco-Agronomică Optimă</h4>
+                            <p style="color:#1b5e20; margin:5px 0 0 0;">
+                                <b>Fuziune Validată:</b> Cultura curentă de Solanacee prezintă patologii foliare, însă modelul de sol recomandă corect o rotație cu o leguminoasă fixatoare avansată de azot (<b>{nume_cultura.capitalize()}</b>). 
+                                Acest plan de asolament va rupe ciclul biologic al fitopatogenilor din sol și va reface stocul nativ de Nitrogen fără fertilizare chimică excesivă.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
                     else:
-                        st.warning("A fost detectată o infecție. Se recomandă izolare și tratament fungic/bacterian.")
-                        
-                with col_res2:
-                    st.metric(label="Recomandare Cultura (Agro-Meteo)", value=nume_cultura.capitalize(), delta=f"{incredere_cultura:.2f}% Acuratețe")
-                    st.info(f"Parametrii actuali (N:{n_val}, Umiditate:{hum_val}%) sunt optimi pentru {nume_cultura}.")
-            
-            with tab2:
-                st.markdown("#### Cum a gandit Inteligenta Artificiala?")
-                st.markdown("Sistemul **Grad-CAM** evidentiaza cu rosu zonele celulare care au declansat alerta de boala.")
-                col_xai1, col_xai2, col_xai3 = st.columns([1, 2, 1])
-                with col_xai2:
-                    st.image(imagine_explicata, caption='Radar AI (Zone Rosii = Focar Infectie)', use_column_width=True)
+                        st.info("Fuziune neutră: Rezultatele sunt consistente din punct de vedere ecologic. Nu s-au detectat anomalii sau corelații ideale de asolament.")
