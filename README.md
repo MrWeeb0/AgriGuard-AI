@@ -39,8 +39,8 @@ Platforma integrează un sistem multi-modal ce decuplează procesarea datelor st
                 └──────────────┬──────────────┘
                                │
             ┌──────────────────┼──────────────────┐
-            │                                      │
-            v                                      v
+            │                                     │
+            v                                     v
 ┌──────────────────────────┐      ┌──────────────────────────┐
 │ DATE NESTRUCTURATE:      │      │ DATE STRUCTURATE:        │
 │ IMAGINE                  │      │ SENZORI                  │
@@ -49,7 +49,7 @@ Platforma integrează un sistem multi-modal ce decuplează procesarea datelor st
                v                             v
 ┌──────────────────────────┐      ┌──────────────────────────┐
 │ EfficientNet-B0 (PyTorch)│      │ Random Forest            │
-│ Input: Imagine frunză    │      │ Input: [N, P, K, T,     │
+│ Input: Imagine frunză    │      │ Input: [N, P, K, T,      │
 │ (RGB)                    │      │         H, pH, Rain]     │
 │ Output: Probabilități    │      │ Output: Probabilități    │
 │ clasă                    │      │ cultură                  │
