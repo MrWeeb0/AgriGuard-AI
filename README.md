@@ -33,6 +33,7 @@ Valoarea practică a sistemului este definită de un set de indicatori de perfor
 
 Platforma integrează un sistem multi-modal ce decuplează procesarea datelor structurate de cele nestructurate în două servicii Machine Learning complementare, unificate la nivel de backend printr-un modul de validare ierarhică a consistenței logice.
 
+```
                 ┌─────────────────────────────┐
                 │   INTERFAȚA STREAMLIT       │
                 └──────────────┬──────────────┘
@@ -69,6 +70,7 @@ Platforma integrează un sistem multi-modal ce decuplează procesarea datelor st
                ┌──────────────────────────────┐
                │  Raport de Diagnostic Hibrid │
                └──────────────────────────────┘
+```
 
 ### 2.1 Serviciul ML pe Date Structurate (Recomandare Culturi)
 * **Model:** Ansamblu de arbori de decizie de tip Random Forest, optimizat prin căutare sistematică în rețea.
