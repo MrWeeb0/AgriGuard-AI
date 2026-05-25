@@ -54,7 +54,7 @@ Platforma integrează un sistem multi-modal ce decuplează procesarea datelor st
 │ clasă                    │      │ cultură                  │
 │ Filtru OOD: Softmax τ    │      │ Tuning: GridSearchCV +   │
 │ = 0.75                   │      │ StratifiedKFold          │
-└──────────────┬-----------┘      └──────────┬───────────────┘
+└──────────────┬───────────┘      └──────────┬───────────────┘
                │                             │
                └──────────────┬──────────────┘
                               │
