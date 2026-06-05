@@ -7,6 +7,7 @@ import joblib
 import pandas as pd
 import numpy as np
 import cv2
+import os
 
 st.set_page_config(page_title="AgriGuard AI Pro", page_icon="🌱", layout="wide")
 
@@ -35,16 +36,32 @@ def load_vision_model():
     num_classes = 15
     model = models.efficientnet_b0(weights=None)
     model.classifier[1] = torch.nn.Linear(model.classifier[1].in_features, num_classes)
-    # Asigură-te că folosești calea către modelul finetuned pe care l-ai antrenat
-    model.load_state_dict(torch.load('models/vision_model_rtx_finetuned.pth', map_location=torch.device('cpu')))
-    model.eval()
+    # Get the absolute path to the models directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    model_path = os.path.join(project_root, 'models', 'vision_model_rtx_finetuned.pth')
+    try:
+        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+        model.eval()
+    except FileNotFoundError:
+        st.error(f"Model file not found at {model_path}")
+        raise
     return model
 
 @st.cache_resource
 def load_tabular_model():
-    model_rf = joblib.load('models/random_forest_soil_model.pkl')
-    scaler = joblib.load('models/soil_scaler.pkl')
-    encoder = joblib.load('models/soil_label_encoder.pkl')
+    # Get the absolute path to the models directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    models_dir = os.path.join(project_root, 'models')
+    
+    try:
+        model_rf = joblib.load(os.path.join(models_dir, 'random_forest_soil_model.pkl'))
+        scaler = joblib.load(os.path.join(models_dir, 'soil_scaler.pkl'))
+        encoder = joblib.load(os.path.join(models_dir, 'soil_label_encoder.pkl'))
+    except FileNotFoundError as e:
+        st.error(f"Model file not found: {e}")
+        raise
     return model_rf, scaler, encoder
 
 vision_model = load_vision_model()
@@ -97,30 +114,98 @@ class GradCAM:
         self.gradients = grad_output[0]
 
     def genereaza_harta(self, x, class_idx):
-        output = self.model(x)
-        self.model.zero_grad()
-        class_loss = output[0, class_idx]
-        class_loss.backward(retain_graph=True)
-        gradients = self.gradients.data.cpu().numpy()[0]
-        activations = self.activations.data.cpu().numpy()[0]
-        weights = np.mean(gradients, axis=(1, 2))
-        cam = np.zeros(activations.shape[1:], dtype=np.float32)
-        for i, w_val in enumerate(weights):
-            cam += w_val * activations[i]
-        cam = np.maximum(cam, 0)
-        cam = cv2.resize(cam, (224, 224))
-        cam = cam - np.min(cam)
-        if np.max(cam) != 0:
-            cam = cam / np.max(cam)
-        return cam
+        try:
+            output = self.model(x)
+            self.model.zero_grad()
+            class_loss = output[0, class_idx]
+            class_loss.backward(retain_graph=True)
+            
+            if self.gradients is None or self.activations is None:
+                raise ValueError("Gradients or activations are None")
+            
+            gradients = self.gradients.data.cpu().numpy()[0]
+            activations = self.activations.data.cpu().numpy()[0]
+            weights = np.mean(gradients, axis=(1, 2))
+            cam = np.zeros(activations.shape[1:], dtype=np.float32)
+            for i, w_val in enumerate(weights):
+                cam += w_val * activations[i]
+            cam = np.maximum(cam, 0)
+            cam = cv2.resize(cam, (224, 224))
+            cam = cam - np.min(cam)
+            
+            # Improved normalization with fallback
+            cam_max = np.max(cam)
+            if cam_max > 0:
+                cam = cam / cam_max
+            else:
+                # If all zeros, create a small non-zero heatmap
+                cam = np.ones_like(cam) * 0.1
+            
+            # Ensure values are in valid range
+            cam = np.clip(cam, 0, 1)
+            return cam
+        except Exception as e:
+            st.error(f"Error generating heatmap: {str(e)}")
+            # Return a default heatmap
+            return np.ones((224, 224), dtype=np.float32) * 0.1
 
 def aplica_harta_peste_imagine(img_pil, heatmap):
-    img_cv = np.array(img_pil.resize((224, 224)))
-    img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)
-    heatmap_cv = np.uint8(255 * heatmap)
-    heatmap_cv = cv2.applyColorMap(heatmap_cv, cv2.COLORMAP_JET)
-    superimposed_img = heatmap_cv * 0.4 + img_cv * 0.6
-    return Image.fromarray(cv2.cvtColor(np.uint8(superimposed_img), cv2.COLOR_BGR2RGB))
+    try:
+        # Validate inputs
+        if img_pil is None:
+            raise ValueError("Input image is None")
+        if heatmap is None:
+            raise ValueError("Heatmap is None")
+        
+        # Convert PIL image to numpy array
+        img_cv = np.array(img_pil.resize((224, 224)))
+        if img_cv is None or img_cv.size == 0:
+            raise ValueError("Failed to convert PIL image to numpy array")
+        
+        # Ensure image is RGB and convert to BGR
+        if len(img_cv.shape) == 2:  # Grayscale image
+            img_cv = cv2.cvtColor(img_cv, cv2.COLOR_GRAY2BGR)
+        elif img_cv.shape[2] == 4:  # RGBA image
+            img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGBA2BGR)
+        else:
+            img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)
+        
+        # Validate and process heatmap
+        if not isinstance(heatmap, np.ndarray):
+            heatmap = np.array(heatmap)
+        
+        # Ensure heatmap is 2D
+        if len(heatmap.shape) != 2:
+            raise ValueError(f"Heatmap must be 2D, got shape {heatmap.shape}")
+        
+        # Resize heatmap if necessary
+        if heatmap.shape != (224, 224):
+            heatmap = cv2.resize(heatmap, (224, 224))
+        
+        # Normalize heatmap to 0-255 range
+        heatmap = np.clip(heatmap, 0, 1)  # Ensure values are in [0, 1]
+        heatmap_cv = np.uint8(255 * heatmap)
+        
+        # Apply color map
+        heatmap_cv = cv2.applyColorMap(heatmap_cv, cv2.COLORMAP_JET)
+        
+        # Ensure img_cv is uint8
+        img_cv = np.uint8(img_cv)
+        
+        # Blend images
+        superimposed_img = heatmap_cv * 0.4 + img_cv * 0.6
+        superimposed_img = np.uint8(superimposed_img)
+        
+        # Convert back to PIL image
+        result = Image.fromarray(cv2.cvtColor(superimposed_img, cv2.COLOR_BGR2RGB))
+        return result
+    except Exception as e:
+        st.error(f"Error in heatmap application: {str(e)}")
+        # Return the original image if heatmap application fails
+        try:
+            return img_pil.resize((224, 224)) if img_pil is not None else None
+        except:
+            return None
 
 cam_engine = GradCAM(vision_model, vision_model.features[-1])
 
@@ -149,7 +234,7 @@ with col_img:
 
 st.markdown("---")
 
-if st.button("Execută Analiza Multimodală Hibridă", use_container_width=True):
+if st.button("Execută Analiza Multimodală Hibridă"):
     with st.spinner('Se rulează inferența ierarhică și verificarea consistenței logice...'):
         executa_sol = False
         executa_viziune = False
@@ -185,52 +270,65 @@ if st.button("Execută Analiza Multimodală Hibridă", use_container_width=True)
             incredere_cultura = probabilitati_sol[0][index_cultura] * 100
             
             if executa_viziune:
-                harta_termica = cam_engine.genereaza_harta(img_tensor, index_boala)
-                imagine_explicata = aplica_harta_peste_imagine(imagine, harta_termica)
-                nume_boala = CLASE_BOLI[index_boala].replace("___", " - ").replace("_", " ")
-                familie_botanica = obtine_familie_botanica(CLASE_BOLI[index_boala])
-                
-                st.success("Fuziune ierarhică multimodală finalizată.")
-                tab1, tab2, tab3 = st.tabs(["Raport Agronomic Integrat", "Explicabilitate Vizuală (Grad-CAM)", "Fuziune și Validare Backend"])
-                
-                with tab1:
-                    col_res1, col_res2 = st.columns(2)
-                    with col_res1:
-                        st.metric(label="Patologie Detectată", value=nume_boala, delta=f"{incredere_boala*100:.2f}% Confidențialitate")
-                    with col_res2:
-                        st.metric(label="Recomandare Management Teren", value=nume_cultura.capitalize(), delta=f"{incredere_cultura:.2f}% Stabilitate")
-                
-                with tab2:
-                    st.markdown("#### Validare Mapare Localizată (XAI)")
-                    col_xai1, col_xai2, col_xai3 = st.columns([1, 2, 1])
-                    with col_xai2:
-                        st.image(imagine_explicata, caption='Zonele de activare neuronală asociate patologiei', use_container_width=True)
-                
-                with tab3:
-                    st.markdown("#### Controlul Consistenței Logice Multimodale")
-                    if familie_botanica in MATRICE_COMPATIBILITATE_ROTATIE:
-                        if nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE[familie_botanica]['anomalie_critica']:
-                            st.markdown(f"""
-                            <div style="background-color:#ffebee; padding:15px; border-left:6px solid #e53935; border-radius:4px;">
-                                <h4 style="color:#c62828; margin:0;">⚠️ Alertă de Monocultură și Verificare Consistență</h4>
-                                <p style="color:#b71c1c; margin:5px 0 0 0;">
-                                    <b>Conflict de Asolament:</b> S-a detectat o infecție activă pe o plantă din familia <b>{familie_botanica}</b>. Replantarea imediată a aceleiași culturi (<b>{nume_cultura.capitalize()}</b>) contrazice bunele practici. Agenții patogeni pot persista în sol. Schimbați managementul asolamentului.
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        elif nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE[familie_botanica]['optimizat']:
-                            st.markdown(f"""
-                            <div style="background-color:#e8f5e9; padding:15px; border-left:6px solid #43a047; border-radius:4px;">
-                                <h4 style="color:#2e7d32; margin:0;">✅ Rotație Eco-Agronomică Validată</h4>
-                                <p style="color:#1b5e20; margin:5px 0 0 0;">
-                                    <b>Sinergie Validată:</b> Pentru a curăța solul de infecția cu {nume_boala}, sistemul recomandă o rotație optimizată cu leguminoasa <b>{nume_cultura.capitalize()}</b>, refăcând stocul de Azot natural.
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
+                try:
+                    harta_termica = cam_engine.genereaza_harta(img_tensor, index_boala)
+                    if harta_termica is None:
+                        raise ValueError("Generated heatmap is None")
+                    
+                    imagine_explicata = aplica_harta_peste_imagine(imagine, harta_termica)
+                    if imagine_explicata is None:
+                        raise ValueError("Failed to apply heatmap to image")
+                    
+                    nume_boala = CLASE_BOLI[index_boala].replace("___", " - ").replace("_", " ")
+                    familie_botanica = obtine_familie_botanica(CLASE_BOLI[index_boala])
+                    
+                    st.success("Fuziune ierarhică multimodală finalizată.")
+                    tab1, tab2, tab3 = st.tabs(["Raport Agronomic Integrat", "Explicabilitate Vizuală (Grad-CAM)", "Fuziune și Validare Backend"])
+                    
+                    with tab1:
+                        col_res1, col_res2 = st.columns(2)
+                        with col_res1:
+                            st.metric(label="Patologie Detectată", value=nume_boala, delta=f"{incredere_boala*100:.2f}% Confidențialitate")
+                        with col_res2:
+                            st.metric(label="Recomandare Management Teren", value=nume_cultura.capitalize(), delta=f"{incredere_cultura:.2f}% Stabilitate")
+                    
+                    with tab2:
+                        st.markdown("#### Validare Mapare Localizată (XAI)")
+                        col_xai1, col_xai2, col_xai3 = st.columns([1, 2, 1])
+                        with col_xai2:
+                            if imagine_explicata is not None:
+                                st.image(imagine_explicata, caption='Zonele de activare neuronală asociate patologiei')
+                            else:
+                                st.error("Could not generate explanation image")
+                    
+                    with tab3:
+                        st.markdown("#### Controlul Consistenței Logice Multimodale")
+                        if familie_botanica in MATRICE_COMPATIBILITATE_ROTATIE:
+                            if nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE[familie_botanica]['anomalie_critica']:
+                                st.markdown(f"""
+                                <div style="background-color:#ffebee; padding:15px; border-left:6px solid #e53935; border-radius:4px;">
+                                    <h4 style="color:#c62828; margin:0;">⚠️ Alertă de Monocultură și Verificare Consistență</h4>
+                                    <p style="color:#b71c1c; margin:5px 0 0 0;">
+                                        <b>Conflict de Asolament:</b> S-a detectat o infecție activă pe o plantă din familia <b>{familie_botanica}</b>. Replantarea imediată a aceleiași culturi (<b>{nume_cultura.capitalize()}</b>) contrazice bunele practici. Agenții patogeni pot persista în sol. Schimbați managementul asolamentului.
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            elif nume_cultura in MATRICE_COMPATIBILITATE_ROTATIE[familie_botanica]['optimizat']:
+                                st.markdown(f"""
+                                <div style="background-color:#e8f5e9; padding:15px; border-left:6px solid #43a047; border-radius:4px;">
+                                    <h4 style="color:#2e7d32; margin:0;">✅ Rotație Eco-Agronomică Validată</h4>
+                                    <p style="color:#1b5e20; margin:5px 0 0 0;">
+                                        <b>Sinergie Validată:</b> Pentru a curăța solul de infecția cu {nume_boala}, sistemul recomandă o rotație optimizată cu leguminoasa <b>{nume_cultura.capitalize()}</b>, refăcând stocul de Azot natural.
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            else:
+                                st.info(f"Fuziune neutră: Rotația cu {nume_cultura.capitalize()} este compatibilă.")
                         else:
-                            st.info(f"Fuziune neutră: Rotația cu {nume_cultura.capitalize()} este compatibilă.")
-                    else:
-                        st.info("Fuziune neutră: Clasa detectată nu impune restricții severe de rotație.")
+                            st.info("Fuziune neutră: Clasa detectată nu impune restricții severe de rotație.")
+                except Exception as e:
+                    st.error(f"Error during vision analysis: {str(e)}")
+                    st.info("Displaying soil analysis results only.")
             else:
                 st.success("Analiză pedoclimatică finalizată.")
                 tab1 = st.tabs(["Plan de Asolament Optimizat"])[0]
